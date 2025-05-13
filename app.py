@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS travel_records (
 """)
 conn.commit()
 
-# Header with logo and subtitle
+# Logo + header
 st.markdown("<div style='text-align:center'>", unsafe_allow_html=True)
 st.image("hd_logo.png", width=120)
 st.markdown("</div>", unsafe_allow_html=True)
@@ -49,10 +49,9 @@ st.markdown("<h3 style='text-align: center; color: #DC2626;'>MENA Logistics Team
 
 tab1, tab2, tab3 = st.tabs(["📝 Add New Trip", "📊 Records & Statistics", "📈 Dashboard"])
 
-# Page 1: Add Trip
+# Page 1
 with tab1:
     st.subheader("📝 Add a New Trip")
-
     with st.form("add_trip_form"):
         c1, c2, c3 = st.columns(3)
         traveler = c1.text_input("Traveler Name")
@@ -111,7 +110,7 @@ with tab1:
             conn.commit()
             st.success("Trip saved successfully ✅")
 
-# Page 2: Records & Statistics
+# Page 2
 with tab2:
     st.subheader("📊 All Travel Records")
     df = pd.read_sql_query("SELECT * FROM travel_records ORDER BY id DESC", conn)
@@ -134,34 +133,36 @@ with tab2:
 
         st.metric("Total CO₂ (kg)", f"{df['co2_tons'].sum():.2f}")
 
-        st.subheader("⬇️ Export Options")
-        now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        excel_all = io.BytesIO()
-        with pd.ExcelWriter(excel_all, engine="xlsxwriter") as writer:
-            df.to_excel(writer, index=False, sheet_name="All Records")
+        st.subheader("📝 Editable Table")
+        edited_df = st.data_editor(df.drop(columns=["Month"]), num_rows="dynamic")
 
-        st.download_button(
-            "📤 Export All Records to Excel",
-            data=excel_all.getvalue(),
-            file_name=f"travel_records_full_{now}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        if st.button("💾 Save Changes"):
+            for _, row in edited_df.iterrows():
+                dep = pd.to_datetime(row['departure_date'], errors='coerce')
+                ret = pd.to_datetime(row['return_date'], errors='coerce') if row['return_date'] else None
+                conn.execute("""
+                    UPDATE travel_records SET
+                        traveler=?, position=?, ta=?, project=?, fund=?,
+                        activity=?, budget_line=?, airfare_ticket=?, change_fare=?,
+                        final_fare=?, airplus_invoice=?, eticket_number=?,
+                        itinerary=?, departure_date=?, return_date=?,
+                        travel_class=?, trip_type=?, co2_tons=?, days_travelled=?,
+                        booked_by=?, remarks=?
+                    WHERE id=?
+                """, (
+                    row['traveler'], row['position'], row['ta'], row['project'], row['fund'],
+                    row['activity'], row['budget_line'], row['airfare_ticket'], row['change_fare'],
+                    row['final_fare'], row['airplus_invoice'], row['eticket_number'],
+                    row['itinerary'], dep.date().isoformat() if pd.notna(dep) else None,
+                    ret.date().isoformat() if pd.notna(ret) else None,
+                    row['travel_class'], row['trip_type'], row['co2_tons'],
+                    row['days_travelled'], row['booked_by'], row['remarks'],
+                    row['id']
+                ))
+            conn.commit()
+            st.success("Changes saved ✅")
 
-        st.subheader("📋 Select Specific Records")
-        selected_ids = st.multiselect("Select record IDs", df['id'].tolist())
-        if selected_ids:
-            export_df = df[df['id'].isin(selected_ids)]
-            excel_sel = io.BytesIO()
-            with pd.ExcelWriter(excel_sel, engine="xlsxwriter") as writer:
-                export_df.to_excel(writer, index=False, sheet_name="Selected Records")
-            st.download_button(
-                "📤 Export Selected Records",
-                data=excel_sel.getvalue(),
-                file_name=f"travel_records_selected_{now}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-# Page 3: Dashboard
+# Page 3
 with tab3:
     st.subheader("📈 Dashboard")
     df = pd.read_sql_query("SELECT * FROM travel_records", conn)
