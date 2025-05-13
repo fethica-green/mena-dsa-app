@@ -5,7 +5,7 @@ import pandas as pd
 import io
 from datetime import datetime, date
 
-st.set_page_config(page_title="MENA Travel App", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="MENA Travel Records App", layout="wide")
 
 # Database setup
 conn = sqlite3.connect("data.db", check_same_thread=False)
@@ -40,12 +40,18 @@ CREATE TABLE IF NOT EXISTS travel_records (
 """)
 conn.commit()
 
+# Header with logo and subtitle
+st.markdown("<div style='text-align:center'>", unsafe_allow_html=True)
+st.image("hd_logo.png", width=120)
+st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("<h1 style='text-align: center;'>✈️ MENA Travel Records App</h1>", unsafe_allow_html=True)
-tab1, tab2, tab3 = st.tabs(["📝 Add New Trip", "📊 Records & Export", "📈 Dashboard"])
+st.markdown("<h3 style='text-align: center; color: #DC2626;'>MENA Logistics Team</h3>", unsafe_allow_html=True)
+
+tab1, tab2, tab3 = st.tabs(["📝 Add New Trip", "📊 Records & Statistics", "📈 Dashboard"])
 
 # Page 1: Add Trip
 with tab1:
-    st.subheader("📝 Add a New Travel Record")
+    st.subheader("📝 Add a New Trip")
 
     with st.form("add_trip_form"):
         c1, c2, c3 = st.columns(3)
@@ -67,7 +73,7 @@ with tab1:
         eticket_number = c4.text_input("E-ticket Number")
 
         c1, c2, c3 = st.columns(3)
-        itinerary = c1.text_input("Itinerary (e.g. GVA-TUN-GVA)")
+        itinerary = c1.text_input("Itinerary")
         departure_date = c2.date_input("Departure Date")
         one_way = c3.checkbox("One-way Trip?")
         return_date = None if one_way else c3.date_input("Return Date", min_value=departure_date)
@@ -75,7 +81,7 @@ with tab1:
         c1, c2, c3, c4 = st.columns(4)
         travel_class = c1.selectbox("Travel Class", ["Economy", "Business", "Train 1st", "Train 2nd"])
         trip_type = c2.selectbox("Trip Type", ["International", "Domestic"])
-        co2_tons = c3.number_input("Estimated CO₂ (kg)", value=0.0)
+        co2_tons = c3.number_input("CO₂ (kg)", value=0.0)
         days = 1 if one_way else (return_date - departure_date).days + 1
         c4.metric("Days Traveled", days)
 
@@ -105,27 +111,55 @@ with tab1:
             conn.commit()
             st.success("Trip saved successfully ✅")
 
-# Page 2: Records & Export
+# Page 2: Records & Statistics
 with tab2:
-    st.subheader("📊 Recorded Trips")
+    st.subheader("📊 All Travel Records")
     df = pd.read_sql_query("SELECT * FROM travel_records ORDER BY id DESC", conn)
 
     if df.empty:
-        st.info("No records yet.")
+        st.info("No records found.")
     else:
-        st.dataframe(df, use_container_width=True)
+        row_filter = st.text_input("🔍 Filter rows (search text):")
+        if row_filter:
+            df = df[df.apply(
+                lambda r: r.astype(str).str.contains(row_filter, case=False, na=False).any(),
+                axis=1
+            )]
 
+        df['departure_date'] = pd.to_datetime(df['departure_date'], errors='coerce')
+        df['Month'] = df['departure_date'].dt.to_period('M').astype(str)
+        sel_month = st.selectbox("📅 Filter by Month", ["All"] + sorted(df['Month'].dropna().unique()))
+        if sel_month != "All":
+            df = df[df['Month'] == sel_month]
+
+        st.metric("Total CO₂ (kg)", f"{df['co2_tons'].sum():.2f}")
+
+        st.subheader("⬇️ Export Options")
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        excel_output = io.BytesIO()
-        with pd.ExcelWriter(excel_output, engine="xlsxwriter") as writer:
-            df.to_excel(writer, index=False, sheet_name="Trips")
+        excel_all = io.BytesIO()
+        with pd.ExcelWriter(excel_all, engine="xlsxwriter") as writer:
+            df.to_excel(writer, index=False, sheet_name="All Records")
 
         st.download_button(
-            label="⬇️ Export All to Excel",
-            data=excel_output.getvalue(),
-            file_name=f"travel_records_{now}.xlsx",
+            "📤 Export All Records to Excel",
+            data=excel_all.getvalue(),
+            file_name=f"travel_records_full_{now}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+        st.subheader("📋 Select Specific Records")
+        selected_ids = st.multiselect("Select record IDs", df['id'].tolist())
+        if selected_ids:
+            export_df = df[df['id'].isin(selected_ids)]
+            excel_sel = io.BytesIO()
+            with pd.ExcelWriter(excel_sel, engine="xlsxwriter") as writer:
+                export_df.to_excel(writer, index=False, sheet_name="Selected Records")
+            st.download_button(
+                "📤 Export Selected Records",
+                data=excel_sel.getvalue(),
+                file_name=f"travel_records_selected_{now}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 # Page 3: Dashboard
 with tab3:
@@ -138,13 +172,13 @@ with tab3:
     st.metric("Total CO₂ (kg)", f"{df['co2_tons'].sum():.2f}")
     st.metric("Total Airfare", f"{(df['airfare_ticket'] + df['change_fare']).sum():.2f} CHF")
 
-    st.write("### Trips per Month")
+    st.write("### 📅 Trips per Month")
     st.bar_chart(df['Month'].value_counts().sort_index())
 
-    st.write("### Trips by Position")
+    st.write("### 🧍 Trips by Position")
     st.bar_chart(df['position'].value_counts())
 
-    st.write("### Top Travelers by CO₂")
+    st.write("### 🌍 Top 5 Travelers by CO₂")
     st.bar_chart(
         df.groupby('traveler')['co2_tons'].sum().sort_values(ascending=False).head(5)
     )
