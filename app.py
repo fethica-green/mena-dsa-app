@@ -114,8 +114,16 @@ def main():
     st.markdown("<div style='text-align:center'>", unsafe_allow_html=True)
     st.image("hd_logo.png", width=120)
     st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("<h1 class='main-header'>✈️ Travel Records MENA - ToolBox</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 class='sub-header'>MENA Logistics Team</h3>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-header'>✈️ Travel Records MENA - ToolBox 🧰</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 class='sub-header'>MENA Logistics Team</h3>
+<details style='text-align:center; font-size:1rem; margin-bottom:1.5rem;'>
+<summary>📘 How to use?</summary>
+<ul style='list-style: none; padding-left: 0;'>
+  <li>📝 Fill the form to save a new trip</li>
+  <li>📊 Use filters and edit saved records</li>
+  <li>📈 Explore the statistics and export data</li>
+</ul>
+</details>", unsafe_allow_html=True)
 
     tab1, tab2, tab3 = st.tabs(["📝 New Trip", "📊 Records & Statistics", "📈 Dashboard"])
 
